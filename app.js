@@ -80,7 +80,7 @@ function toggleMobileFullscreen() {
   }
 }
 
-// Rotate Laptop Video Preview
+// Rotate Laptop Video Preview Manual Toggle
 function rotateLaptopVideo(e) {
   if (e) e.stopPropagation();
   laptopRotationAngle = (laptopRotationAngle + 90) % 360;
@@ -104,10 +104,38 @@ function applyVideoTransform(angle) {
   }
 }
 
+// Adapt Laptop Container aspect ratio to Portrait vs Landscape stream
+function updateLaptopContainerOrientation(phoneAngle, videoW, videoH) {
+  const container = document.getElementById('laptopVideoContainer');
+  if (!container) return;
+
+  let isPortrait = false;
+
+  if (phoneAngle === 0 || phoneAngle === 180) {
+    isPortrait = true;
+  } else if (phoneAngle === 90 || phoneAngle === 270) {
+    isPortrait = false;
+  } else if (videoW && videoH) {
+    isPortrait = videoW < videoH;
+  }
+
+  console.log(`Setting laptop preview box: isPortrait = ${isPortrait}`);
+
+  if (isPortrait) {
+    container.classList.remove('is-landscape');
+    container.classList.add('is-portrait');
+  } else {
+    container.classList.remove('is-portrait');
+    container.classList.add('is-landscape');
+  }
+}
+
 // Automatic Laptop Video Counter-Rotation (Opposite Direction for Upright View)
 function applyAutoRotation(phoneAngle) {
   let laptopAngle = (360 - (phoneAngle % 360)) % 360;
   console.log(`Phone Angle: ${phoneAngle}°, Counter-Rotating Laptop to: ${laptopAngle}°`);
+
+  updateLaptopContainerOrientation(phoneAngle);
   applyVideoTransform(laptopAngle);
 }
 
@@ -115,6 +143,8 @@ function applyAutoRotation(phoneAngle) {
 if (remoteVideo) {
   remoteVideo.onloadedmetadata = () => {
     console.log(`Video metadata loaded: ${remoteVideo.videoWidth}x${remoteVideo.videoHeight}`);
+    updateLaptopContainerOrientation(null, remoteVideo.videoWidth, remoteVideo.videoHeight);
+
     if (remoteVideo.videoWidth < remoteVideo.videoHeight && laptopRotationAngle === 0) {
       applyVideoTransform(90);
     }
@@ -336,6 +366,8 @@ async function connectToMobile() {
     }
     remoteOverlay.classList.add('hidden');
     updateLaptopStatus('streaming', 'Streaming');
+
+    updateLaptopContainerOrientation(null, remoteVideo.videoWidth, remoteVideo.videoHeight);
 
     if (remoteVideo.videoWidth < remoteVideo.videoHeight && laptopRotationAngle === 0) {
       applyVideoTransform(90);
