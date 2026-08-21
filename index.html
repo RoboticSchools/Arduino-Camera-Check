@@ -167,7 +167,7 @@
       min-height: 280px;
     }
 
-    /* Laptop Video Rotation */
+    /* Automatic Laptop Video Rotation Transforms */
     #remoteVideo {
       transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       transform-origin: center center;
@@ -282,17 +282,6 @@
 
     .status-dot.gray {
       background-color: #64748b;
-    }
-
-    /* Instructions */
-    .instruction-box {
-      background: rgba(56, 189, 248, 0.1);
-      border-left: 4px solid #38bdf8;
-      padding: 14px;
-      border-radius: 0 8px 8px 0;
-      font-size: 14px;
-      line-height: 1.5;
-      color: #e2e8f0;
     }
 
     /* Laptop Form Controls */
@@ -453,7 +442,6 @@
           </div>
         </div>
 
-
         <button id="btnRetryCamera" class="btn btn-secondary hidden" onclick="startMobileCamera()">Retry Camera</button>
       </div>
     </main>
@@ -476,13 +464,6 @@
         <div class="video-container laptop-video" id="laptopVideoContainer">
           <video id="remoteVideo" autoplay playsinline muted></video>
 
-          <!-- Top Right Rotate 90° Button -->
-          <button id="btnLaptopRotate" class="fullscreen-btn" onclick="rotateLaptopVideo()" title="Rotate 90°">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-            </svg>
-          </button>
-
           <div id="remoteOverlay" class="video-overlay">
             <p id="remoteOverlayText">[ LIVE MOBILE CAMERA ]</p>
           </div>
@@ -504,6 +485,7 @@
     let localStream = null;
     let peer = null;
     let currentCall = null;
+    let dataConn = null;
     let myPeerId = null;
 
     // Elements
@@ -580,14 +562,19 @@
       }
     }
 
-    // Rotate Laptop Video Preview 90 Degrees
-    let laptopRotationAngle = 0;
-    function rotateLaptopVideo() {
+    // Automatic Laptop Video Rotation Matching Mobile Device Physical Orientation
+    function applyAutoRotation(angle) {
       const video = document.getElementById('remoteVideo');
-      laptopRotationAngle = (laptopRotationAngle + 90) % 360;
+      if (!video) return;
+
+      let norm = ((angle % 360) + 360) % 360;
       video.className = '';
-      if (laptopRotationAngle !== 0) {
-        video.classList.add(`rotate-${laptopRotationAngle}`);
+      if (norm === 90) {
+        video.classList.add('rotate-90');
+      } else if (norm === 180) {
+        video.classList.add('rotate-180');
+      } else if (norm === 270) {
+        video.classList.add('rotate-270');
       }
     }
 
@@ -624,6 +611,7 @@
         updateStreamingStatus('yellow', 'Ready');
 
         initMobilePeer();
+        setupMobileOrientationTracking();
 
       } catch (err) {
         console.error('Camera Error:', err);
@@ -638,21 +626,55 @@
       return `CAM-${code}`;
     }
 
+    function getMobileOrientationAngle() {
+      if (screen.orientation && screen.orientation.angle !== undefined) {
+        return screen.orientation.angle;
+      }
+      if (window.orientation !== undefined) {
+        return window.orientation;
+      }
+      return 0;
+    }
+
+    function sendMobileOrientation() {
+      const angle = getMobileOrientationAngle();
+      if (dataConn && dataConn.open) {
+        dataConn.send({ type: 'orientation', angle: angle });
+      }
+    }
+
+    function setupMobileOrientationTracking() {
+      const handleOrient = () => {
+        sendMobileOrientation();
+      };
+
+      if (screen.orientation) {
+        screen.orientation.addEventListener('change', handleOrient);
+      }
+      window.addEventListener('orientationchange', handleOrient);
+      window.addEventListener('resize', handleOrient);
+    }
+
     function initMobilePeer() {
       cleanupPeer();
 
       const customId = generateShortCode();
-      
-      // Initialize PeerJS
+
       if (typeof Peer !== 'undefined') {
-        peer = new Peer(customId, {
-          debug: 1
-        });
+        peer = new Peer(customId, { debug: 1 });
 
         peer.on('open', (id) => {
           myPeerId = id;
           mobileAddressDisplay.textContent = id;
           console.log('Mobile Peer ID ready:', id);
+        });
+
+        // Listen for data channel connection from laptop to send live orientation
+        peer.on('connection', (conn) => {
+          dataConn = conn;
+          dataConn.on('open', () => {
+            sendMobileOrientation();
+          });
         });
 
         peer.on('call', (call) => {
@@ -689,7 +711,6 @@
           }
         });
       } else {
-        // Fallback if PeerJS CDN unaccessible
         mobileAddressDisplay.textContent = window.location.hostname;
       }
     }
@@ -731,7 +752,6 @@
         return;
       }
 
-      // Clean input: remove url prefix or spaces
       code = code.replace(/^https?:\/\//i, '').split('/')[0].split(':')[0].trim();
 
       updateLaptopStatus('connecting', 'Connecting...');
@@ -743,7 +763,19 @@
         await new Promise(r => peer.on('open', r));
       }
 
-      // Call Mobile Peer with dummy/empty audio/video stream or direct call
+      // Establish Data Channel for automatic orientation sync
+      dataConn = peer.connect(code);
+      dataConn.on('open', () => {
+        console.log('Data connection open with mobile');
+      });
+      dataConn.on('data', (data) => {
+        if (data && data.type === 'orientation') {
+          console.log('Auto rotation received from phone:', data.angle);
+          applyAutoRotation(data.angle);
+        }
+      });
+
+      // Call Mobile Peer
       const canvas = document.createElement('canvas');
       canvas.width = 16;
       canvas.height = 16;
@@ -778,7 +810,6 @@
         remoteOverlayText.textContent = 'Connection Failed. Please check Code.';
       });
 
-      // Timeout safety check
       setTimeout(() => {
         if (remoteOverlayText.textContent === 'Connecting to Mobile Camera Stream...' && !remoteVideo.srcObject) {
           updateLaptopStatus('connecting', 'Still Connecting... Check Code on Phone');
@@ -799,6 +830,10 @@
     }
 
     function cleanupPeer() {
+      if (dataConn) {
+        dataConn.close();
+        dataConn = null;
+      }
       if (currentCall) {
         currentCall.close();
         currentCall = null;

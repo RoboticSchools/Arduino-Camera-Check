@@ -2,6 +2,7 @@ let currentMode = 'mobile';
 let localStream = null;
 let peer = null;
 let currentCall = null;
+let dataConn = null;
 let myPeerId = null;
 
 // Elements
@@ -58,36 +59,41 @@ function setMode(mode) {
   }
 }
 
-    // Toggle Fullscreen on Mobile Camera View
-    function toggleMobileFullscreen() {
-      const container = document.getElementById('mobileVideoContainer');
-      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-        if (container.requestFullscreen) {
-          container.requestFullscreen();
-        } else if (container.webkitRequestFullscreen) {
-          container.webkitRequestFullscreen();
-        } else if (mobilePreview.webkitEnterFullscreen) {
-          mobilePreview.webkitEnterFullscreen();
-        }
-      } else {
-        if (document.exitFullscreen) {
-          document.exitFullscreen();
-        } else if (document.webkitExitFullscreen) {
-          document.webkitExitFullscreen();
-        }
-      }
+// Toggle Fullscreen on Mobile Camera View
+function toggleMobileFullscreen() {
+  const container = document.getElementById('mobileVideoContainer');
+  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+    if (container.requestFullscreen) {
+      container.requestFullscreen();
+    } else if (container.webkitRequestFullscreen) {
+      container.webkitRequestFullscreen();
+    } else if (mobilePreview.webkitEnterFullscreen) {
+      mobilePreview.webkitEnterFullscreen();
     }
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+  }
+}
 
-    // Rotate Laptop Video Preview 90 Degrees
-    let laptopRotationAngle = 0;
-    function rotateLaptopVideo() {
-      const video = document.getElementById('remoteVideo');
-      laptopRotationAngle = (laptopRotationAngle + 90) % 360;
-      video.className = '';
-      if (laptopRotationAngle !== 0) {
-        video.classList.add(`rotate-${laptopRotationAngle}`);
-      }
-    }
+// Automatic Laptop Video Rotation Matching Mobile Device Physical Orientation
+function applyAutoRotation(angle) {
+  const video = document.getElementById('remoteVideo');
+  if (!video) return;
+
+  let norm = ((angle % 360) + 360) % 360;
+  video.className = '';
+  if (norm === 90) {
+    video.classList.add('rotate-90');
+  } else if (norm === 180) {
+    video.classList.add('rotate-180');
+  } else if (norm === 270) {
+    video.classList.add('rotate-270');
+  }
+}
 
 // ==========================================
 // MOBILE MODE LOGIC
@@ -122,6 +128,7 @@ async function startMobileCamera() {
     updateStreamingStatus('yellow', 'Ready');
 
     initMobilePeer();
+    setupMobileOrientationTracking();
 
   } catch (err) {
     console.error('Camera Error:', err);
@@ -136,6 +143,35 @@ function generateShortCode() {
   return `CAM-${code}`;
 }
 
+function getMobileOrientationAngle() {
+  if (screen.orientation && screen.orientation.angle !== undefined) {
+    return screen.orientation.angle;
+  }
+  if (window.orientation !== undefined) {
+    return window.orientation;
+  }
+  return 0;
+}
+
+function sendMobileOrientation() {
+  const angle = getMobileOrientationAngle();
+  if (dataConn && dataConn.open) {
+    dataConn.send({ type: 'orientation', angle: angle });
+  }
+}
+
+function setupMobileOrientationTracking() {
+  const handleOrient = () => {
+    sendMobileOrientation();
+  };
+
+  if (screen.orientation) {
+    screen.orientation.addEventListener('change', handleOrient);
+  }
+  window.addEventListener('orientationchange', handleOrient);
+  window.addEventListener('resize', handleOrient);
+}
+
 function initMobilePeer() {
   cleanupPeer();
 
@@ -148,6 +184,13 @@ function initMobilePeer() {
       myPeerId = id;
       mobileAddressDisplay.textContent = id;
       console.log('Mobile Peer ID ready:', id);
+    });
+
+    peer.on('connection', (conn) => {
+      dataConn = conn;
+      dataConn.on('open', () => {
+        sendMobileOrientation();
+      });
     });
 
     peer.on('call', (call) => {
@@ -236,6 +279,17 @@ async function connectToMobile() {
     await new Promise(r => peer.on('open', r));
   }
 
+  dataConn = peer.connect(code);
+  dataConn.on('open', () => {
+    console.log('Data connection open with mobile');
+  });
+  dataConn.on('data', (data) => {
+    if (data && data.type === 'orientation') {
+      console.log('Auto rotation received from phone:', data.angle);
+      applyAutoRotation(data.angle);
+    }
+  });
+
   const canvas = document.createElement('canvas');
   canvas.width = 16;
   canvas.height = 16;
@@ -290,6 +344,10 @@ function updateLaptopStatus(stateClass, text) {
 }
 
 function cleanupPeer() {
+  if (dataConn) {
+    dataConn.close();
+    dataConn = null;
+  }
   if (currentCall) {
     currentCall.close();
     currentCall = null;
