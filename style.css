@@ -113,6 +113,27 @@ body {
   min-height: 280px;
 }
 
+#remoteVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  transition: transform 0.3s ease;
+  transform-origin: center center;
+}
+
+#remoteVideo.rotate-90 {
+  transform: rotate(90deg) scale(1.77);
+}
+
+#remoteVideo.rotate-180 {
+  transform: rotate(180deg);
+}
+
+#remoteVideo.rotate-270 {
+  transform: rotate(270deg) scale(1.77);
+}
+
 video {
   width: 100%;
   height: 100%;
