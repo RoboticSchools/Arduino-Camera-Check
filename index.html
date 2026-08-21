@@ -167,6 +167,24 @@
       min-height: 280px;
     }
 
+    /* Laptop Video Rotation */
+    #remoteVideo {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transform-origin: center center;
+    }
+
+    #remoteVideo.rotate-90 {
+      transform: rotate(90deg) scale(0.62);
+    }
+
+    #remoteVideo.rotate-180 {
+      transform: rotate(180deg);
+    }
+
+    #remoteVideo.rotate-270 {
+      transform: rotate(270deg) scale(0.62);
+    }
+
     video {
       width: 100%;
       height: 100%;
@@ -455,8 +473,16 @@
         </div>
 
         <!-- Laptop Video Display Area -->
-        <div class="video-container laptop-video">
+        <div class="video-container laptop-video" id="laptopVideoContainer">
           <video id="remoteVideo" autoplay playsinline muted></video>
+
+          <!-- Top Right Rotate 90° Button -->
+          <button id="btnLaptopRotate" class="fullscreen-btn" onclick="rotateLaptopVideo()" title="Rotate 90°">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </button>
+
           <div id="remoteOverlay" class="video-overlay">
             <p id="remoteOverlayText">[ LIVE MOBILE CAMERA ]</p>
           </div>
@@ -551,6 +577,17 @@
         } else if (document.webkitExitFullscreen) {
           document.webkitExitFullscreen();
         }
+      }
+    }
+
+    // Rotate Laptop Video Preview 90 Degrees
+    let laptopRotationAngle = 0;
+    function rotateLaptopVideo() {
+      const video = document.getElementById('remoteVideo');
+      laptopRotationAngle = (laptopRotationAngle + 90) % 360;
+      video.className = '';
+      if (laptopRotationAngle !== 0) {
+        video.classList.add(`rotate-${laptopRotationAngle}`);
       }
     }
 

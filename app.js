@@ -78,6 +78,17 @@ function setMode(mode) {
       }
     }
 
+    // Rotate Laptop Video Preview 90 Degrees
+    let laptopRotationAngle = 0;
+    function rotateLaptopVideo() {
+      const video = document.getElementById('remoteVideo');
+      laptopRotationAngle = (laptopRotationAngle + 90) % 360;
+      video.className = '';
+      if (laptopRotationAngle !== 0) {
+        video.classList.add(`rotate-${laptopRotationAngle}`);
+      }
+    }
+
 // ==========================================
 // MOBILE MODE LOGIC
 // ==========================================
