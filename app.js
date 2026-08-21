@@ -79,18 +79,22 @@ function toggleMobileFullscreen() {
   }
 }
 
-// Automatic Laptop Video Rotation Matching Mobile Device Physical Orientation
-function applyAutoRotation(angle) {
+// Automatic Laptop Video Counter-Rotation (Opposite Direction for Upright View)
+function applyAutoRotation(phoneAngle) {
   const video = document.getElementById('remoteVideo');
   if (!video) return;
 
-  let norm = ((angle % 360) + 360) % 360;
+  // Calculate OPPOSITE rotation angle so laptop view remains upright
+  let laptopAngle = (360 - (phoneAngle % 360)) % 360;
+
+  console.log(`Phone Angle: ${phoneAngle}°, Counter-Rotating Laptop to: ${laptopAngle}°`);
+
   video.className = '';
-  if (norm === 90) {
+  if (laptopAngle === 90) {
     video.classList.add('rotate-90');
-  } else if (norm === 180) {
+  } else if (laptopAngle === 180) {
     video.classList.add('rotate-180');
-  } else if (norm === 270) {
+  } else if (laptopAngle === 270) {
     video.classList.add('rotate-270');
   }
 }
@@ -144,13 +148,13 @@ function generateShortCode() {
 }
 
 function getMobileOrientationAngle() {
+  let angle = 0;
   if (screen.orientation && screen.orientation.angle !== undefined) {
-    return screen.orientation.angle;
+    angle = screen.orientation.angle;
+  } else if (window.orientation !== undefined) {
+    angle = window.orientation;
   }
-  if (window.orientation !== undefined) {
-    return window.orientation;
-  }
-  return 0;
+  return ((angle % 360) + 360) % 360;
 }
 
 function sendMobileOrientation() {

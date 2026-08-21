@@ -167,7 +167,7 @@
       min-height: 280px;
     }
 
-    /* Automatic Laptop Video Rotation Transforms */
+    /* Counter-Rotation Transforms to Keep Laptop View Upright */
     #remoteVideo {
       transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       transform-origin: center center;
@@ -562,18 +562,22 @@
       }
     }
 
-    // Automatic Laptop Video Rotation Matching Mobile Device Physical Orientation
-    function applyAutoRotation(angle) {
+    // Automatic Laptop Video Counter-Rotation (Opposite Direction for Upright View)
+    function applyAutoRotation(phoneAngle) {
       const video = document.getElementById('remoteVideo');
       if (!video) return;
 
-      let norm = ((angle % 360) + 360) % 360;
+      // Calculate OPPOSITE rotation angle so laptop view remains upright
+      let laptopAngle = (360 - (phoneAngle % 360)) % 360;
+
+      console.log(`Phone Angle: ${phoneAngle}°, Counter-Rotating Laptop to: ${laptopAngle}°`);
+
       video.className = '';
-      if (norm === 90) {
+      if (laptopAngle === 90) {
         video.classList.add('rotate-90');
-      } else if (norm === 180) {
+      } else if (laptopAngle === 180) {
         video.classList.add('rotate-180');
-      } else if (norm === 270) {
+      } else if (laptopAngle === 270) {
         video.classList.add('rotate-270');
       }
     }
@@ -627,13 +631,13 @@
     }
 
     function getMobileOrientationAngle() {
+      let angle = 0;
       if (screen.orientation && screen.orientation.angle !== undefined) {
-        return screen.orientation.angle;
+        angle = screen.orientation.angle;
+      } else if (window.orientation !== undefined) {
+        angle = window.orientation;
       }
-      if (window.orientation !== undefined) {
-        return window.orientation;
-      }
-      return 0;
+      return ((angle % 360) + 360) % 360;
     }
 
     function sendMobileOrientation() {
@@ -669,7 +673,6 @@
           console.log('Mobile Peer ID ready:', id);
         });
 
-        // Listen for data channel connection from laptop to send live orientation
         peer.on('connection', (conn) => {
           dataConn = conn;
           dataConn.on('open', () => {
@@ -763,7 +766,6 @@
         await new Promise(r => peer.on('open', r));
       }
 
-      // Establish Data Channel for automatic orientation sync
       dataConn = peer.connect(code);
       dataConn.on('open', () => {
         console.log('Data connection open with mobile');
@@ -775,7 +777,6 @@
         }
       });
 
-      // Call Mobile Peer
       const canvas = document.createElement('canvas');
       canvas.width = 16;
       canvas.height = 16;
