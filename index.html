@@ -10,6 +10,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 
+  <!-- PeerJS Library for WebRTC P2P Video Streaming -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
   <style>
     /* Reset & Base Styles */
     * {
@@ -172,7 +175,7 @@
 
     .info-value {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 22px;
+      font-size: 24px;
       font-weight: 700;
       color: #38bdf8;
       word-break: break-all;
@@ -262,7 +265,7 @@
       padding: 14px 16px;
       color: #f8fafc;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 15px;
+      font-size: 16px;
       outline: none;
       transition: border-color 0.2s ease;
     }
@@ -300,38 +303,6 @@
 
     .btn-secondary:hover {
       background: #475569;
-    }
-
-    /* Discovered Sessions */
-    .discovered-sessions {
-      font-size: 13px;
-      color: #94a3b8;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .session-chips {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    .chip {
-      background: #334155;
-      color: #38bdf8;
-      font-family: 'JetBrains Mono', monospace;
-      padding: 4px 10px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-    }
-
-    .chip:hover {
-      background: #38bdf8;
-      color: #0f172a;
     }
 
     /* Laptop Status Bar */
@@ -374,7 +345,7 @@
 <body>
   <div class="app-container">
 
-    <!-- App Mode Selector Tabs -->
+    <!-- Mode Selector Tabs -->
     <header class="app-header">
       <div class="mode-tabs">
         <button id="tabMobile" class="tab-btn active" onclick="setMode('mobile')">📱 Mobile Mode</button>
@@ -398,8 +369,8 @@
 
         <!-- Connection Address Banner -->
         <div class="info-box">
-          <div class="info-label">IP / Connection Address:</div>
-          <div id="mobileAddressDisplay" class="info-value">Detecting IP...</div>
+          <div class="info-label">Mobile Connection Code / Address:</div>
+          <div id="mobileAddressDisplay" class="info-value">Generating Code...</div>
         </div>
 
         <!-- Mobile Status Badges -->
@@ -420,10 +391,9 @@
 
         <!-- Mobile Instructions -->
         <div class="instruction-box">
-          <p>💡 <strong>Instruction:</strong> Open this same web app on your laptop and enter the address shown above.</p>
+          <p>💡 <strong>Instruction:</strong> Open this same web app on your laptop and enter the code shown above.</p>
         </div>
 
-        <!-- Retry Camera Button (hidden unless error) -->
         <button id="btnRetryCamera" class="btn btn-secondary hidden" onclick="startMobileCamera()">Retry Camera</button>
       </div>
     </main>
@@ -435,14 +405,10 @@
 
         <!-- Address Entry & Connect Form -->
         <div class="connect-form">
-          <label for="inputMobileAddress" class="input-label">Mobile IP / Connection Address:</label>
+          <label for="inputMobileAddress" class="input-label">Enter Mobile Connection Code / Address:</label>
           <div class="input-group">
-            <input type="text" id="inputMobileAddress" placeholder="e.g. 192.168.1.15:8443 or 192.168.1.15" spellcheck="false" autocomplete="off">
+            <input type="text" id="inputMobileAddress" placeholder="e.g. CAM-4892 or 192.168.0.7" spellcheck="false" autocomplete="off">
             <button id="btnConnect" class="btn btn-primary" onclick="connectToMobile()">CONNECT</button>
-          </div>
-          <div id="discoveredSessionsList" class="discovered-sessions hidden">
-            <span>Discovered Mobile Sessions: </span>
-            <div id="sessionChips" class="session-chips"></div>
           </div>
         </div>
 
@@ -466,25 +432,11 @@
   </div>
 
   <script>
-    // State Management
     let currentMode = 'mobile';
     let localStream = null;
-    let peerConnection = null;
-    let sessionId = null;
-    let serverIp = window.location.hostname || '127.0.0.1';
-    let serverPort = window.location.port || '8443';
-    let pollInterval = null;
-    let pendingIceCandidates = [];
-
-    // STUN server configuration for local P2P WebRTC ICE candidate resolution
-    const rtcConfig = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
-      ],
-      iceCandidatePoolSize: 10
-    };
+    let peer = null;
+    let currentCall = null;
+    let myPeerId = null;
 
     // Elements
     const tabMobile = document.getElementById('tabMobile');
@@ -512,20 +464,14 @@
     const statusLaptopDot = document.getElementById('statusLaptopDot');
     const statusLaptopText = document.getElementById('statusLaptopText');
 
-    // Initialize on DOM load
     window.addEventListener('DOMContentLoaded', () => {
       const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
-      const initialMode = isMobile ? 'mobile' : 'laptop';
-      
-      fetchServerInfo();
-      setMode(initialMode);
+      setMode(isMobile ? 'mobile' : 'laptop');
     });
 
     function setMode(mode) {
       currentMode = mode;
-
-      stopPolling();
-      closePeerConnection();
+      cleanupPeer();
 
       if (mode === 'mobile') {
         tabMobile.classList.add('active');
@@ -542,12 +488,12 @@
 
         stopLocalCamera();
         updateLaptopStatus('disconnected', 'Disconnected');
-        fetchDiscoveredSessions();
+        initLaptopPeer();
       }
     }
 
     // ==========================================
-    // MOBILE MODE FUNCTIONS
+    // MOBILE MODE LOGIC
     // ==========================================
 
     async function startMobileCamera() {
@@ -564,7 +510,6 @@
             audio: false
           });
         } catch (e) {
-          console.warn('Rear camera exact match failed, using environment fallback:', e);
           stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: 'environment' },
             audio: false
@@ -573,19 +518,80 @@
 
         localStream = stream;
         mobilePreview.srcObject = stream;
-        await mobilePreview.play().catch(e => console.warn('Mobile preview play:', e));
+        await mobilePreview.play().catch(e => console.warn('Preview play:', e));
         cameraOverlay.classList.add('hidden');
 
         updateCameraStatus('green', 'Connected');
         updateStreamingStatus('yellow', 'Ready');
 
-        await registerMobileSession();
+        initMobilePeer();
 
       } catch (err) {
-        console.error('Camera Access Error:', err);
+        console.error('Camera Error:', err);
         updateCameraStatus('red', 'Permission Denied / Error');
         cameraOverlayText.textContent = '❌ Camera Access Failed: ' + err.message;
         document.getElementById('btnRetryCamera').classList.remove('hidden');
+      }
+    }
+
+    function generateShortCode() {
+      const code = Math.floor(1000 + Math.random() * 9000);
+      return `CAM-${code}`;
+    }
+
+    function initMobilePeer() {
+      cleanupPeer();
+
+      const customId = generateShortCode();
+      
+      // Initialize PeerJS
+      if (typeof Peer !== 'undefined') {
+        peer = new Peer(customId, {
+          debug: 1
+        });
+
+        peer.on('open', (id) => {
+          myPeerId = id;
+          mobileAddressDisplay.textContent = id;
+          console.log('Mobile Peer ID ready:', id);
+        });
+
+        peer.on('call', (call) => {
+          console.log('Incoming call from laptop');
+          updateStreamingStatus('yellow', 'Connecting to Laptop...');
+          currentCall = call;
+
+          call.answer(localStream);
+
+          call.on('stream', (remoteStream) => {
+            console.log('Stream established with laptop');
+          });
+
+          updateStreamingStatus('green', 'Streaming to Laptop');
+
+          call.on('close', () => {
+            updateStreamingStatus('yellow', 'Ready (Waiting for Laptop)');
+          });
+
+          call.on('error', (err) => {
+            console.error('Call error:', err);
+            updateStreamingStatus('yellow', 'Ready');
+          });
+        });
+
+        peer.on('error', (err) => {
+          console.warn('PeerJS fallback to random ID:', err);
+          if (err.type === 'unavailable-id') {
+            peer = new Peer({ debug: 1 });
+            peer.on('open', id => {
+              myPeerId = id;
+              mobileAddressDisplay.textContent = id;
+            });
+          }
+        });
+      } else {
+        // Fallback if PeerJS CDN unaccessible
+        mobileAddressDisplay.textContent = window.location.hostname;
       }
     }
 
@@ -595,108 +601,6 @@
         localStream = null;
       }
       mobilePreview.srcObject = null;
-    }
-
-    async function registerMobileSession() {
-      try {
-        const res = await fetch('/api/signal/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: serverIp })
-        });
-        const data = await res.json();
-
-        if (data.session_id) {
-          sessionId = data.session_id;
-          const fullAddr = `${serverIp}:${serverPort}`;
-          mobileAddressDisplay.textContent = fullAddr;
-
-          startMobileSignalPolling();
-        }
-      } catch (err) {
-        console.error('Registration failed:', err);
-        mobileAddressDisplay.textContent = `${serverIp}:${serverPort}`;
-      }
-    }
-
-    function startMobileSignalPolling() {
-      stopPolling();
-      pollInterval = setInterval(async () => {
-        if (!sessionId) return;
-        try {
-          const res = await fetch(`/api/signal/poll?session_id=${encodeURIComponent(sessionId)}&role=mobile`);
-          const data = await res.json();
-
-          if (data.messages && data.messages.length > 0) {
-            for (const msg of data.messages) {
-              await handleMobileReceivedSignal(msg);
-            }
-          }
-        } catch (e) {
-          console.error('Mobile poll error:', e);
-        }
-      }, 1000);
-    }
-
-    async function handleMobileReceivedSignal(msg) {
-      if (msg.type === 'offer') {
-        console.log('Mobile received WebRTC Offer from laptop');
-        updateStreamingStatus('yellow', 'Connecting to Laptop...');
-
-        createMobilePeerConnection();
-
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-
-        // Process queued candidates
-        while (pendingIceCandidates.length > 0) {
-          const candidate = pendingIceCandidates.shift();
-          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.warn('Queued ICE cand error:', e));
-        }
-
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-
-        await sendSignal('laptop', { type: 'answer', sdp: answer });
-
-      } else if (msg.type === 'candidate') {
-        if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
-          try {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
-          } catch (e) {
-            console.error('Error adding ICE candidate on mobile:', e);
-          }
-        } else {
-          pendingIceCandidates.push(msg.candidate);
-        }
-      }
-    }
-
-    function createMobilePeerConnection() {
-      closePeerConnection();
-      pendingIceCandidates = [];
-
-      peerConnection = new RTCPeerConnection(rtcConfig);
-
-      if (localStream) {
-        localStream.getTracks().forEach(track => {
-          peerConnection.addTrack(track, localStream);
-        });
-      }
-
-      peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          sendSignal('laptop', { type: 'candidate', candidate: event.candidate });
-        }
-      };
-
-      peerConnection.onconnectionstatechange = () => {
-        console.log('Mobile PC Connection State:', peerConnection.connectionState);
-        if (peerConnection.connectionState === 'connected') {
-          updateStreamingStatus('green', 'Streaming to Laptop');
-        } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
-          updateStreamingStatus('yellow', 'Ready (Waiting for Laptop)');
-        }
-      };
     }
 
     function updateCameraStatus(color, text) {
@@ -710,125 +614,77 @@
     }
 
     // ==========================================
-    // LAPTOP MODE FUNCTIONS
+    // LAPTOP MODE LOGIC
     // ==========================================
 
+    function initLaptopPeer() {
+      cleanupPeer();
+      if (typeof Peer !== 'undefined') {
+        peer = new Peer({ debug: 1 });
+        peer.on('open', id => console.log('Laptop Peer ready:', id));
+      }
+    }
+
     async function connectToMobile() {
-      let targetAddr = inputMobileAddress.value.trim();
-      if (!targetAddr) {
-        alert('Please enter the Mobile IP or Connection Address displayed on your phone screen.');
+      let code = inputMobileAddress.value.trim();
+      if (!code) {
+        alert('Please enter the Mobile Connection Code (e.g. CAM-1234) shown on your mobile screen.');
         return;
       }
 
-      targetAddr = targetAddr.replace(/^https?:\/\//i, '').split('/')[0].split(':')[0];
-      sessionId = targetAddr;
+      // Clean input: remove url prefix or spaces
+      code = code.replace(/^https?:\/\//i, '').split('/')[0].split(':')[0].trim();
 
       updateLaptopStatus('connecting', 'Connecting...');
       remoteOverlayText.textContent = 'Connecting to Mobile Camera Stream...';
       remoteOverlay.classList.remove('hidden');
 
-      createLaptopPeerConnection();
-
-      try {
-        const offer = await peerConnection.createOffer({
-          offerToReceiveVideo: true,
-          offerToReceiveAudio: false
-        });
-        await peerConnection.setLocalDescription(offer);
-
-        await sendSignal('mobile', { type: 'offer', sdp: offer });
-
-        startLaptopSignalPolling();
-      } catch (err) {
-        console.error('Error creating offer:', err);
-        updateLaptopStatus('disconnected', 'Failed to Create Offer');
+      if (!peer || peer.destroyed) {
+        peer = new Peer({ debug: 1 });
+        await new Promise(r => peer.on('open', r));
       }
-    }
 
-    function createLaptopPeerConnection() {
-      closePeerConnection();
-      pendingIceCandidates = [];
+      // Call Mobile Peer with dummy/empty audio/video stream or direct call
+      const canvas = document.createElement('canvas');
+      canvas.width = 16;
+      canvas.height = 16;
+      const dummyStream = canvas.captureStream(1);
 
-      peerConnection = new RTCPeerConnection(rtcConfig);
+      console.log('Calling mobile peer:', code);
+      const call = peer.call(code, dummyStream);
+      currentCall = call;
 
-      peerConnection.ontrack = async (event) => {
-        console.log('Laptop received remote track:', event.streams[0]);
-        if (event.streams && event.streams[0]) {
-          remoteVideo.srcObject = event.streams[0];
-          remoteVideo.muted = true; // Essential for browser autoplay policies
-          try {
-            await remoteVideo.play();
-            console.log('Remote video playing successfully');
-          } catch (err) {
-            console.warn('Video play error:', err);
-          }
-          remoteOverlay.classList.add('hidden');
-          updateLaptopStatus('streaming', 'Streaming');
-        }
-      };
-
-      peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          sendSignal('mobile', { type: 'candidate', candidate: event.candidate });
-        }
-      };
-
-      peerConnection.onconnectionstatechange = () => {
-        console.log('Laptop PC Connection State:', peerConnection.connectionState);
-        if (peerConnection.connectionState === 'connecting') {
-          updateLaptopStatus('connecting', 'Connecting');
-        } else if (peerConnection.connectionState === 'connected') {
-          updateLaptopStatus('connected', 'Connected');
-          remoteOverlay.classList.add('hidden');
-        } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
-          updateLaptopStatus('disconnected', 'Disconnected');
-          remoteOverlay.classList.remove('hidden');
-          remoteOverlayText.textContent = 'Connection Disconnected';
-        }
-      };
-    }
-
-    function startLaptopSignalPolling() {
-      stopPolling();
-      pollInterval = setInterval(async () => {
-        if (!sessionId) return;
+      call.on('stream', async (remoteStream) => {
+        console.log('Laptop received remote stream!');
+        remoteVideo.srcObject = remoteStream;
+        remoteVideo.muted = true;
         try {
-          const res = await fetch(`/api/signal/poll?session_id=${encodeURIComponent(sessionId)}&role=laptop`);
-          const data = await res.json();
-
-          if (data.messages && data.messages.length > 0) {
-            for (const msg of data.messages) {
-              await handleLaptopReceivedSignal(msg);
-            }
-          }
+          await remoteVideo.play();
         } catch (e) {
-          console.error('Laptop poll error:', e);
+          console.warn('Autoplay error:', e);
         }
-      }, 1000);
-    }
+        remoteOverlay.classList.add('hidden');
+        updateLaptopStatus('streaming', 'Streaming');
+      });
 
-    async function handleLaptopReceivedSignal(msg) {
-      if (msg.type === 'answer' && peerConnection) {
-        console.log('Laptop received WebRTC Answer from mobile');
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+      call.on('close', () => {
+        updateLaptopStatus('disconnected', 'Disconnected');
+        remoteOverlay.classList.remove('hidden');
+        remoteOverlayText.textContent = 'Stream Closed';
+      });
 
-        // Process queued candidates
-        while (pendingIceCandidates.length > 0) {
-          const candidate = pendingIceCandidates.shift();
-          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.warn('Queued ICE cand error:', e));
+      call.on('error', (err) => {
+        console.error('Laptop call error:', err);
+        updateLaptopStatus('disconnected', 'Connection Failed');
+        remoteOverlayText.textContent = 'Connection Failed. Please check Code.';
+      });
+
+      // Timeout safety check
+      setTimeout(() => {
+        if (remoteOverlayText.textContent === 'Connecting to Mobile Camera Stream...' && !remoteVideo.srcObject) {
+          updateLaptopStatus('connecting', 'Still Connecting... Check Code on Phone');
         }
-
-      } else if (msg.type === 'candidate') {
-        if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
-          try {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
-          } catch (e) {
-            console.error('Error adding ICE candidate on laptop:', e);
-          }
-        } else {
-          pendingIceCandidates.push(msg.candidate);
-        }
-      }
+      }, 5000);
     }
 
     function updateLaptopStatus(stateClass, text) {
@@ -843,85 +699,15 @@
       statusLaptopText.textContent = text;
     }
 
-    // ==========================================
-    // SHARED UTILITIES
-    // ==========================================
-
-    async function fetchServerInfo() {
-      try {
-        const res = await fetch('/api/info');
-        const data = await res.json();
-        if (data.ip) {
-          serverIp = data.ip;
-          serverPort = data.port || '8443';
-          
-          if (inputMobileAddress && !inputMobileAddress.value) {
-            inputMobileAddress.value = `${serverIp}:${serverPort}`;
-          }
-        }
-      } catch (e) {
-        console.warn('Could not fetch server info:', e);
+    function cleanupPeer() {
+      if (currentCall) {
+        currentCall.close();
+        currentCall = null;
       }
-    }
-
-    async function fetchDiscoveredSessions() {
-      try {
-        const res = await fetch('/api/info');
-        const data = await res.json();
-        const chipsContainer = document.getElementById('sessionChips');
-        const container = document.getElementById('discoveredSessionsList');
-
-        if (data.sessions && data.sessions.length > 0) {
-          chipsContainer.innerHTML = '';
-          data.sessions.forEach(sess => {
-            const chip = document.createElement('span');
-            chip.className = 'chip';
-            chip.textContent = sess;
-            chip.onclick = () => {
-              inputMobileAddress.value = sess;
-            };
-            chipsContainer.appendChild(chip);
-          });
-          container.classList.remove('hidden');
-        } else {
-          container.classList.add('hidden');
-        }
-      } catch (e) {
-        // Ignore
+      if (peer) {
+        peer.destroy();
+        peer = null;
       }
-    }
-
-    async function sendSignal(targetRole, payload) {
-      try {
-        await fetch('/api/signal/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: sessionId,
-            target_role: targetRole,
-            payload: payload
-          })
-        });
-      } catch (e) {
-        console.error('Error sending signal:', e);
-      }
-    }
-
-    function stopPolling() {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-      }
-    }
-
-    function closePeerConnection() {
-      if (peerConnection) {
-        peerConnection.onicecandidate = null;
-        peerConnection.ontrack = null;
-        peerConnection.close();
-        peerConnection = null;
-      }
-      pendingIceCandidates = [];
     }
   </script>
 </body>
