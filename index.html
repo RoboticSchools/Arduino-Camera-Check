@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Wi-Fi Mobile Camera Stream Test</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* Reset & Base Styles */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 16px;
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 680px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Header & Tab Buttons */
+    .app-header {
+      background: #1e293b;
+      padding: 6px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+    }
+
+    .mode-tabs {
+      display: flex;
+      gap: 6px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 12px 16px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      color: #94a3b8;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-btn.active {
+      background: #3b82f6;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Card Container */
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    .view-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #38bdf8;
+      text-align: center;
+    }
+
+    /* View Section Control */
+    .view-section {
+      display: none;
+    }
+
+    .view-section.active {
+      display: block;
+    }
+
+    /* Video Containers */
+    .video-container {
+      position: relative;
+      width: 100%;
+      background: #000000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mobile-video {
+      aspect-ratio: 4 / 3;
+    }
+
+    .laptop-video {
+      aspect-ratio: 16 / 9;
+      min-height: 280px;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .video-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      text-align: center;
+      gap: 12px;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+
+    .video-overlay.hidden {
+      display: none;
+    }
+
+    /* Info Box & Connection Address */
+    .info-box {
+      background: #0f172a;
+      border: 1px dashed #38bdf8;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .info-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .info-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 22px;
+      font-weight: 700;
+      color: #38bdf8;
+      word-break: break-all;
+      user-select: all;
+    }
+
+    /* Status Badges */
+    .status-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #0f172a;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      color: #cbd5e1;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .status-dot.green {
+      background-color: #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+    }
+
+    .status-dot.yellow {
+      background-color: #eab308;
+      box-shadow: 0 0 8px rgba(234, 179, 8, 0.6);
+    }
+
+    .status-dot.red {
+      background-color: #ef4444;
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+    }
+
+    .status-dot.gray {
+      background-color: #64748b;
+    }
+
+    /* Instructions */
+    .instruction-box {
+      background: rgba(56, 189, 248, 0.1);
+      border-left: 4px solid #38bdf8;
+      padding: 14px;
+      border-radius: 0 8px 8px 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #e2e8f0;
+    }
+
+    /* Laptop Form Controls */
+    .connect-form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .input-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 10px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 14px 16px;
+      color: #f8fafc;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    input[type="text"]:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 14px 20px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: #3b82f6;
+      color: #ffffff;
+    }
+
+    .btn-primary:hover {
+      background: #2563eb;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-secondary {
+      background: #334155;
+      color: #f8fafc;
+    }
+
+    .btn-secondary:hover {
+      background: #475569;
+    }
+
+    /* Discovered Sessions */
+    .discovered-sessions {
+      font-size: 13px;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .session-chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      background: #334155;
+      color: #38bdf8;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .chip:hover {
+      background: #38bdf8;
+      color: #0f172a;
+    }
+
+    /* Laptop Status Bar */
+    .laptop-status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #0f172a;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .status-value.disconnected { color: #94a3b8; }
+    .status-value.connecting { color: #eab308; }
+    .status-value.connected { color: #3b82f6; }
+    .status-value.streaming { color: #22c55e; }
+
+    /* Loading Spinner */
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid rgba(255, 255, 255, 0.2);
+      border-top-color: #38bdf8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- App Mode Selector Tabs -->
+    <header class="app-header">
+      <div class="mode-tabs">
+        <button id="tabMobile" class="tab-btn active" onclick="setMode('mobile')">📱 Mobile Mode</button>
+        <button id="tabLaptop" class="tab-btn" onclick="setMode('laptop')">💻 Laptop Mode</button>
+      </div>
+    </header>
+
+    <!-- MOBILE MODE VIEW -->
+    <main id="mobileView" class="view-section active">
+      <div class="card">
+        <h1 class="view-title">CAMERA TEST</h1>
+
+        <!-- Mobile Live Camera Preview -->
+        <div class="video-container mobile-video">
+          <video id="mobilePreview" autoplay playsinline muted></video>
+          <div id="cameraOverlay" class="video-overlay">
+            <span class="spinner"></span>
+            <p id="cameraOverlayText">Requesting Camera Access...</p>
+          </div>
+        </div>
+
+        <!-- Connection Address Banner -->
+        <div class="info-box">
+          <div class="info-label">IP / Connection Address:</div>
+          <div id="mobileAddressDisplay" class="info-value">Detecting IP...</div>
+        </div>
+
+        <!-- Mobile Status Badges -->
+        <div class="status-list">
+          <div class="status-item">
+            <span id="statusCameraDot" class="status-dot yellow"></span>
+            <span>Camera: <strong id="statusCameraText">Initializing...</strong></span>
+          </div>
+          <div class="status-item">
+            <span id="statusNetworkDot" class="status-dot green"></span>
+            <span>Network: <strong id="statusNetworkText">Connected</strong></span>
+          </div>
+          <div class="status-item">
+            <span id="statusStreamingDot" class="status-dot yellow"></span>
+            <span>Streaming: <strong id="statusStreamingText">Waiting for Laptop</strong></span>
+          </div>
+        </div>
+
+        <!-- Mobile Instructions -->
+        <div class="instruction-box">
+          <p>💡 <strong>Instruction:</strong> Open this same web app on your laptop and enter the address shown above.</p>
+        </div>
+
+        <!-- Retry Camera Button (hidden unless error) -->
+        <button id="btnRetryCamera" class="btn btn-secondary hidden" onclick="startMobileCamera()">Retry Camera</button>
+      </div>
+    </main>
+
+    <!-- LAPTOP MODE VIEW -->
+    <main id="laptopView" class="view-section">
+      <div class="card">
+        <h1 class="view-title">CAMERA VIEWER</h1>
+
+        <!-- Address Entry & Connect Form -->
+        <div class="connect-form">
+          <label for="inputMobileAddress" class="input-label">Mobile IP / Connection Address:</label>
+          <div class="input-group">
+            <input type="text" id="inputMobileAddress" placeholder="e.g. 192.168.1.15:8443 or 192.168.1.15" spellcheck="false" autocomplete="off">
+            <button id="btnConnect" class="btn btn-primary" onclick="connectToMobile()">CONNECT</button>
+          </div>
+          <div id="discoveredSessionsList" class="discovered-sessions hidden">
+            <span>Discovered Mobile Sessions: </span>
+            <div id="sessionChips" class="session-chips"></div>
+          </div>
+        </div>
+
+        <!-- Laptop Video Display Area -->
+        <div class="video-container laptop-video">
+          <video id="remoteVideo" autoplay playsinline></video>
+          <div id="remoteOverlay" class="video-overlay">
+            <p id="remoteOverlayText">[ LIVE MOBILE CAMERA ]</p>
+          </div>
+        </div>
+
+        <!-- Laptop Connection Status -->
+        <div class="laptop-status-bar">
+          <span class="status-label">Status:</span>
+          <span id="statusLaptopDot" class="status-dot gray"></span>
+          <span id="statusLaptopText" class="status-value disconnected">Disconnected</span>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <script>
+    // State Management
+    let currentMode = 'mobile';
+    let localStream = null;
+    let peerConnection = null;
+    let sessionId = null;
+    let serverIp = window.location.hostname || '127.0.0.1';
+    let serverPort = window.location.port || '8443';
+    let pollInterval = null;
+
+    // STUN server configuration for local P2P WebRTC ICE candidate resolution
+    const rtcConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    };
+
+    // Elements
+    const tabMobile = document.getElementById('tabMobile');
+    const tabLaptop = document.getElementById('tabLaptop');
+    const mobileView = document.getElementById('mobileView');
+    const laptopView = document.getElementById('laptopView');
+
+    const mobilePreview = document.getElementById('mobilePreview');
+    const cameraOverlay = document.getElementById('cameraOverlay');
+    const cameraOverlayText = document.getElementById('cameraOverlayText');
+    const mobileAddressDisplay = document.getElementById('mobileAddressDisplay');
+
+    const statusCameraDot = document.getElementById('statusCameraDot');
+    const statusCameraText = document.getElementById('statusCameraText');
+    const statusNetworkDot = document.getElementById('statusNetworkDot');
+    const statusNetworkText = document.getElementById('statusNetworkText');
+    const statusStreamingDot = document.getElementById('statusStreamingDot');
+    const statusStreamingText = document.getElementById('statusStreamingText');
+
+    const inputMobileAddress = document.getElementById('inputMobileAddress');
+    const btnConnect = document.getElementById('btnConnect');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const remoteOverlay = document.getElementById('remoteOverlay');
+    const remoteOverlayText = document.getElementById('remoteOverlayText');
+    const statusLaptopDot = document.getElementById('statusLaptopDot');
+    const statusLaptopText = document.getElementById('statusLaptopText');
+
+    // Initialize on DOM load
+    window.addEventListener('DOMContentLoaded', () => {
+      // Auto-detect mode based on screen width / user agent touch capability
+      const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
+      const initialMode = isMobile ? 'mobile' : 'laptop';
+      
+      fetchServerInfo();
+      setMode(initialMode);
+    });
+
+    function setMode(mode) {
+      currentMode = mode;
+
+      // Clear existing polling / peer connections when switching modes
+      stopPolling();
+      closePeerConnection();
+
+      if (mode === 'mobile') {
+        tabMobile.classList.add('active');
+        tabLaptop.classList.remove('active');
+        mobileView.classList.add('active');
+        laptopView.classList.remove('active');
+
+        // Immediately request camera permission in Mobile Mode
+        startMobileCamera();
+      } else {
+        tabLaptop.classList.add('active');
+        tabMobile.classList.remove('active');
+        laptopView.classList.add('active');
+        mobileView.classList.remove('active');
+
+        // Stop local camera if running in mobile mode previously
+        stopLocalCamera();
+        updateLaptopStatus('disconnected', 'Disconnected');
+        fetchDiscoveredSessions();
+      }
+    }
+
+    // ==========================================
+    // MOBILE MODE FUNCTIONS
+    // ==========================================
+
+    async function startMobileCamera() {
+      updateCameraStatus('yellow', 'Requesting Permission...');
+      cameraOverlay.classList.remove('hidden');
+      cameraOverlayText.textContent = 'Requesting Rear Camera Permission...';
+      document.getElementById('btnRetryCamera').classList.add('hidden');
+
+      try {
+        // Attempt rear camera first, fallback to default camera
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false
+          });
+        } catch (e) {
+          console.warn('Rear camera exact match failed, trying facingMode environment fallback:', e);
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' },
+            audio: false
+          });
+        }
+
+        localStream = stream;
+        mobilePreview.srcObject = stream;
+        cameraOverlay.classList.add('hidden');
+
+        updateCameraStatus('green', 'Connected');
+        updateStreamingStatus('yellow', 'Ready');
+
+        // Register mobile session on server
+        await registerMobileSession();
+
+      } catch (err) {
+        console.error('Camera Access Error:', err);
+        updateCameraStatus('red', 'Permission Denied / Error');
+        cameraOverlayText.textContent = '❌ Camera Access Failed: ' + err.message;
+        document.getElementById('btnRetryCamera').classList.remove('hidden');
+      }
+    }
+
+    function stopLocalCamera() {
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+      }
+      mobilePreview.srcObject = null;
+    }
+
+    async function registerMobileSession() {
+      try {
+        const res = await fetch('/api/signal/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: serverIp })
+        });
+        const data = await res.json();
+
+        if (data.session_id) {
+          sessionId = data.session_id;
+          const fullAddr = `${serverIp}:${serverPort}`;
+          mobileAddressDisplay.textContent = fullAddr;
+
+          // Start polling for laptop SDP offers
+          startMobileSignalPolling();
+        }
+      } catch (err) {
+        console.error('Registration failed:', err);
+        mobileAddressDisplay.textContent = `${serverIp}:${serverPort}`;
+      }
+    }
+
+    function startMobileSignalPolling() {
+      stopPolling();
+      pollInterval = setInterval(async () => {
+        if (!sessionId) return;
+        try {
+          const res = await fetch(`/api/signal/poll?session_id=${encodeURIComponent(sessionId)}&role=mobile`);
+          const data = await res.json();
+
+          if (data.messages && data.messages.length > 0) {
+            for (const msg of data.messages) {
+              handleMobileReceivedSignal(msg);
+            }
+          }
+        } catch (e) {
+          console.error('Mobile poll error:', e);
+        }
+      }, 1000);
+    }
+
+    async function handleMobileReceivedSignal(msg) {
+      if (msg.type === 'offer') {
+        console.log('Mobile received WebRTC Offer from laptop');
+        updateStreamingStatus('yellow', 'Connecting to Laptop...');
+
+        createMobilePeerConnection();
+
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        // Send SDP Answer back to Laptop
+        await sendSignal('laptop', { type: 'answer', sdp: answer });
+
+      } else if (msg.type === 'candidate' && peerConnection) {
+        try {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        } catch (e) {
+          console.error('Error adding ICE candidate on mobile:', e);
+        }
+      }
+    }
+
+    function createMobilePeerConnection() {
+      closePeerConnection();
+
+      peerConnection = new RTCPeerConnection(rtcConfig);
+
+      // Add local video tracks to WebRTC peer connection
+      if (localStream) {
+        localStream.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localStream);
+        });
+      }
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          sendSignal('laptop', { type: 'candidate', candidate: event.candidate });
+        }
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        console.log('Mobile PC Connection State:', peerConnection.connectionState);
+        if (peerConnection.connectionState === 'connected') {
+          updateStreamingStatus('green', 'Streaming to Laptop');
+        } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+          updateStreamingStatus('yellow', 'Ready (Waiting for Laptop)');
+        }
+      };
+    }
+
+    function updateCameraStatus(color, text) {
+      statusCameraDot.className = `status-dot ${color}`;
+      statusCameraText.textContent = text;
+    }
+
+    function updateStreamingStatus(color, text) {
+      statusStreamingDot.className = `status-dot ${color}`;
+      statusStreamingText.textContent = text;
+    }
+
+    // ==========================================
+    // LAPTOP MODE FUNCTIONS
+    // ==========================================
+
+    async function connectToMobile() {
+      let targetAddr = inputMobileAddress.value.trim();
+      if (!targetAddr) {
+        alert('Please enter the Mobile IP or Connection Address displayed on your phone screen.');
+        return;
+      }
+
+      // Extract IP or session ID from user input (e.g., https://192.168.1.15:8443 -> 192.168.1.15)
+      targetAddr = targetAddr.replace(/^https?:\/\//i, '').split('/')[0].split(':')[0];
+      sessionId = targetAddr;
+
+      updateLaptopStatus('connecting', 'Connecting...');
+      remoteOverlayText.textContent = 'Connecting to Mobile Camera Stream...';
+      remoteOverlay.classList.remove('hidden');
+
+      createLaptopPeerConnection();
+
+      // Create WebRTC Offer
+      try {
+        const offer = await peerConnection.createOffer({
+          offerToReceiveVideo: true,
+          offerToReceiveAudio: false
+        });
+        await peerConnection.setLocalDescription(offer);
+
+        // Send Offer to Mobile
+        await sendSignal('mobile', { type: 'offer', sdp: offer });
+
+        // Start polling for Mobile SDP Answer & ICE candidates
+        startLaptopSignalPolling();
+      } catch (err) {
+        console.error('Error creating offer:', err);
+        updateLaptopStatus('disconnected', 'Failed to Create Offer');
+      }
+    }
+
+    function createLaptopPeerConnection() {
+      closePeerConnection();
+
+      peerConnection = new RTCPeerConnection(rtcConfig);
+
+      // Receive remote camera track from Mobile
+      peerConnection.ontrack = (event) => {
+        console.log('Laptop received remote track:', event.streams[0]);
+        if (event.streams && event.streams[0]) {
+          remoteVideo.srcObject = event.streams[0];
+          remoteOverlay.classList.add('hidden');
+          updateLaptopStatus('streaming', 'Streaming');
+        }
+      };
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          sendSignal('mobile', { type: 'candidate', candidate: event.candidate });
+        }
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        console.log('Laptop PC Connection State:', peerConnection.connectionState);
+        if (peerConnection.connectionState === 'connecting') {
+          updateLaptopStatus('connecting', 'Connecting');
+        } else if (peerConnection.connectionState === 'connected') {
+          updateLaptopStatus('connected', 'Connected');
+        } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+          updateLaptopStatus('disconnected', 'Disconnected');
+          remoteOverlay.classList.remove('hidden');
+          remoteOverlayText.textContent = 'Connection Disconnected';
+        }
+      };
+    }
+
+    function startLaptopSignalPolling() {
+      stopPolling();
+      pollInterval = setInterval(async () => {
+        if (!sessionId) return;
+        try {
+          const res = await fetch(`/api/signal/poll?session_id=${encodeURIComponent(sessionId)}&role=laptop`);
+          const data = await res.json();
+
+          if (data.messages && data.messages.length > 0) {
+            for (const msg of data.messages) {
+              handleLaptopReceivedSignal(msg);
+            }
+          }
+        } catch (e) {
+          console.error('Laptop poll error:', e);
+        }
+      }, 1000);
+    }
+
+    async function handleLaptopReceivedSignal(msg) {
+      if (msg.type === 'answer' && peerConnection) {
+        console.log('Laptop received WebRTC Answer from mobile');
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+      } else if (msg.type === 'candidate' && peerConnection) {
+        try {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        } catch (e) {
+          console.error('Error adding ICE candidate on laptop:', e);
+        }
+      }
+    }
+
+    function updateLaptopStatus(stateClass, text) {
+      const dotColorMap = {
+        disconnected: 'gray',
+        connecting: 'yellow',
+        connected: 'green',
+        streaming: 'green'
+      };
+      statusLaptopDot.className = `status-dot ${dotColorMap[stateClass] || 'gray'}`;
+      statusLaptopText.className = `status-value ${stateClass}`;
+      statusLaptopText.textContent = text;
+    }
+
+    // ==========================================
+    // SHARED UTILITIES
+    // ==========================================
+
+    async function fetchServerInfo() {
+      try {
+        const res = await fetch('/api/info');
+        const data = await res.json();
+        if (data.ip) {
+          serverIp = data.ip;
+          serverPort = data.port || '8443';
+          
+          // Auto-prefill input in laptop mode if server IP detected
+          if (inputMobileAddress && !inputMobileAddress.value) {
+            inputMobileAddress.value = `${serverIp}:${serverPort}`;
+          }
+        }
+      } catch (e) {
+        console.warn('Could not fetch server info:', e);
+      }
+    }
+
+    async function fetchDiscoveredSessions() {
+      try {
+        const res = await fetch('/api/info');
+        const data = await res.json();
+        const chipsContainer = document.getElementById('sessionChips');
+        const container = document.getElementById('discoveredSessionsList');
+
+        if (data.sessions && data.sessions.length > 0) {
+          chipsContainer.innerHTML = '';
+          data.sessions.forEach(sess => {
+            const chip = document.createElement('span');
+            chip.className = 'chip';
+            chip.textContent = sess;
+            chip.onclick = () => {
+              inputMobileAddress.value = sess;
+            };
+            chipsContainer.appendChild(chip);
+          });
+          container.classList.remove('hidden');
+        } else {
+          container.classList.add('hidden');
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }
+
+    async function sendSignal(targetRole, payload) {
+      try {
+        await fetch('/api/signal/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            target_role: targetRole,
+            payload: payload
+          })
+        });
+      } catch (e) {
+        console.error('Error sending signal:', e);
+      }
+    }
+
+    function stopPolling() {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    }
+
+    function closePeerConnection() {
+      if (peerConnection) {
+        peerConnection.onicecandidate = null;
+        peerConnection.ontrack = null;
+        peerConnection.close();
+        peerConnection = null;
+      }
+    }
+  </script>
+</body>
+</html>
