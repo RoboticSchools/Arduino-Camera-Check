@@ -58,6 +58,26 @@ function setMode(mode) {
   }
 }
 
+    // Toggle Fullscreen on Mobile Camera View
+    function toggleMobileFullscreen() {
+      const container = document.getElementById('mobileVideoContainer');
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        if (container.requestFullscreen) {
+          container.requestFullscreen();
+        } else if (container.webkitRequestFullscreen) {
+          container.webkitRequestFullscreen();
+        } else if (mobilePreview.webkitEnterFullscreen) {
+          mobilePreview.webkitEnterFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      }
+    }
+
 // ==========================================
 // MOBILE MODE LOGIC
 // ==========================================

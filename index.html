@@ -124,6 +124,44 @@
       aspect-ratio: 4 / 3;
     }
 
+    .fullscreen-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 15;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #f8fafc;
+      padding: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+      transition: all 0.2s ease;
+    }
+
+    .fullscreen-btn:hover {
+      background: #3b82f6;
+      border-color: #3b82f6;
+    }
+
+    /* Native Fullscreen Container Styles */
+    :fullscreen, :-webkit-full-screen {
+      width: 100vw !important;
+      height: 100vh !important;
+      border-radius: 0 !important;
+      border: none !important;
+      background: #000000 !important;
+    }
+
+    :fullscreen video, :-webkit-full-screen video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+    }
+
     .laptop-video {
       aspect-ratio: 16 / 9;
       min-height: 280px;
@@ -359,8 +397,16 @@
         <h1 class="view-title">CAMERA TEST</h1>
 
         <!-- Mobile Live Camera Preview -->
-        <div class="video-container mobile-video">
+        <div class="video-container mobile-video" id="mobileVideoContainer">
           <video id="mobilePreview" autoplay playsinline muted></video>
+          
+          <!-- Top Right Fullscreen Button -->
+          <button id="btnMobileFullscreen" class="fullscreen-btn" onclick="toggleMobileFullscreen()" title="Toggle Fullscreen">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+            </svg>
+          </button>
+
           <div id="cameraOverlay" class="video-overlay">
             <span class="spinner"></span>
             <p id="cameraOverlayText">Requesting Camera Access...</p>
@@ -485,6 +531,26 @@
         stopLocalCamera();
         updateLaptopStatus('disconnected', 'Disconnected');
         initLaptopPeer();
+      }
+    }
+
+    // Toggle Fullscreen on Mobile Camera View
+    function toggleMobileFullscreen() {
+      const container = document.getElementById('mobileVideoContainer');
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        if (container.requestFullscreen) {
+          container.requestFullscreen();
+        } else if (container.webkitRequestFullscreen) {
+          container.webkitRequestFullscreen();
+        } else if (mobilePreview.webkitEnterFullscreen) {
+          mobilePreview.webkitEnterFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
       }
     }
 
