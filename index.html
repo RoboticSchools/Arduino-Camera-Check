@@ -165,12 +165,15 @@
     .laptop-video {
       aspect-ratio: 16 / 9;
       min-height: 280px;
+      cursor: pointer;
     }
 
-    /* Counter-Rotation Transforms to Keep Laptop View Upright */
+    /* Laptop Video Rotation Transforms */
     #remoteVideo {
       transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       transform-origin: center center;
+      max-width: 100%;
+      max-height: 100%;
     }
 
     #remoteVideo.rotate-90 {
@@ -461,8 +464,15 @@
         </div>
 
         <!-- Laptop Video Display Area -->
-        <div class="video-container laptop-video" id="laptopVideoContainer">
+        <div class="video-container laptop-video" id="laptopVideoContainer" onclick="rotateLaptopVideo(event)">
           <video id="remoteVideo" autoplay playsinline muted></video>
+
+          <!-- Top Right Rotate 90° Button -->
+          <button id="btnLaptopRotate" class="fullscreen-btn" onclick="rotateLaptopVideo(event)" title="Rotate Video 90°">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </button>
 
           <div id="remoteOverlay" class="video-overlay">
             <p id="remoteOverlayText">[ LIVE MOBILE CAMERA ]</p>
@@ -487,6 +497,7 @@
     let currentCall = null;
     let dataConn = null;
     let myPeerId = null;
+    let laptopRotationAngle = 0;
 
     // Elements
     const tabMobile = document.getElementById('tabMobile');
@@ -562,24 +573,46 @@
       }
     }
 
-    // Automatic Laptop Video Counter-Rotation (Opposite Direction for Upright View)
-    function applyAutoRotation(phoneAngle) {
+    // Rotate Laptop Video Preview
+    function rotateLaptopVideo(e) {
+      if (e) e.stopPropagation();
+      laptopRotationAngle = (laptopRotationAngle + 90) % 360;
+      applyVideoTransform(laptopRotationAngle);
+    }
+
+    function applyVideoTransform(angle) {
       const video = document.getElementById('remoteVideo');
       if (!video) return;
 
-      // Calculate OPPOSITE rotation angle so laptop view remains upright
-      let laptopAngle = (360 - (phoneAngle % 360)) % 360;
-
-      console.log(`Phone Angle: ${phoneAngle}°, Counter-Rotating Laptop to: ${laptopAngle}°`);
+      let norm = ((angle % 360) + 360) % 360;
+      laptopRotationAngle = norm;
 
       video.className = '';
-      if (laptopAngle === 90) {
+      if (norm === 90) {
         video.classList.add('rotate-90');
-      } else if (laptopAngle === 180) {
+      } else if (norm === 180) {
         video.classList.add('rotate-180');
-      } else if (laptopAngle === 270) {
+      } else if (norm === 270) {
         video.classList.add('rotate-270');
       }
+    }
+
+    // Automatic Laptop Video Counter-Rotation (Opposite Direction for Upright View)
+    function applyAutoRotation(phoneAngle) {
+      let laptopAngle = (360 - (phoneAngle % 360)) % 360;
+      console.log(`Phone Angle: ${phoneAngle}°, Counter-Rotating Laptop to: ${laptopAngle}°`);
+      applyVideoTransform(laptopAngle);
+    }
+
+    // Auto-detect video dimensions on metadata load
+    if (remoteVideo) {
+      remoteVideo.onloadedmetadata = () => {
+        console.log(`Video metadata loaded: ${remoteVideo.videoWidth}x${remoteVideo.videoHeight}`);
+        // If portrait frame sent to landscape container, auto counter-rotate 90 deg
+        if (remoteVideo.videoWidth < remoteVideo.videoHeight && laptopRotationAngle === 0) {
+          applyVideoTransform(90);
+        }
+      };
     }
 
     // ==========================================
@@ -797,6 +830,11 @@
         }
         remoteOverlay.classList.add('hidden');
         updateLaptopStatus('streaming', 'Streaming');
+
+        // Automatic orientation check on metadata load
+        if (remoteVideo.videoWidth < remoteVideo.videoHeight && laptopRotationAngle === 0) {
+          applyVideoTransform(90);
+        }
       });
 
       call.on('close', () => {

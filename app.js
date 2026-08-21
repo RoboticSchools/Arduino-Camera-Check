@@ -4,6 +4,7 @@ let peer = null;
 let currentCall = null;
 let dataConn = null;
 let myPeerId = null;
+let laptopRotationAngle = 0;
 
 // Elements
 const tabMobile = document.getElementById('tabMobile');
@@ -79,24 +80,45 @@ function toggleMobileFullscreen() {
   }
 }
 
-// Automatic Laptop Video Counter-Rotation (Opposite Direction for Upright View)
-function applyAutoRotation(phoneAngle) {
+// Rotate Laptop Video Preview
+function rotateLaptopVideo(e) {
+  if (e) e.stopPropagation();
+  laptopRotationAngle = (laptopRotationAngle + 90) % 360;
+  applyVideoTransform(laptopRotationAngle);
+}
+
+function applyVideoTransform(angle) {
   const video = document.getElementById('remoteVideo');
   if (!video) return;
 
-  // Calculate OPPOSITE rotation angle so laptop view remains upright
-  let laptopAngle = (360 - (phoneAngle % 360)) % 360;
-
-  console.log(`Phone Angle: ${phoneAngle}°, Counter-Rotating Laptop to: ${laptopAngle}°`);
+  let norm = ((angle % 360) + 360) % 360;
+  laptopRotationAngle = norm;
 
   video.className = '';
-  if (laptopAngle === 90) {
+  if (norm === 90) {
     video.classList.add('rotate-90');
-  } else if (laptopAngle === 180) {
+  } else if (norm === 180) {
     video.classList.add('rotate-180');
-  } else if (laptopAngle === 270) {
+  } else if (norm === 270) {
     video.classList.add('rotate-270');
   }
+}
+
+// Automatic Laptop Video Counter-Rotation (Opposite Direction for Upright View)
+function applyAutoRotation(phoneAngle) {
+  let laptopAngle = (360 - (phoneAngle % 360)) % 360;
+  console.log(`Phone Angle: ${phoneAngle}°, Counter-Rotating Laptop to: ${laptopAngle}°`);
+  applyVideoTransform(laptopAngle);
+}
+
+// Auto-detect video dimensions on metadata load
+if (remoteVideo) {
+  remoteVideo.onloadedmetadata = () => {
+    console.log(`Video metadata loaded: ${remoteVideo.videoWidth}x${remoteVideo.videoHeight}`);
+    if (remoteVideo.videoWidth < remoteVideo.videoHeight && laptopRotationAngle === 0) {
+      applyVideoTransform(90);
+    }
+  };
 }
 
 // ==========================================
@@ -314,6 +336,10 @@ async function connectToMobile() {
     }
     remoteOverlay.classList.add('hidden');
     updateLaptopStatus('streaming', 'Streaming');
+
+    if (remoteVideo.videoWidth < remoteVideo.videoHeight && laptopRotationAngle === 0) {
+      applyVideoTransform(90);
+    }
   });
 
   call.on('close', () => {
