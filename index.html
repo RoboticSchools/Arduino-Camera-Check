@@ -306,17 +306,19 @@
     .input-group {
       display: flex;
       gap: 10px;
+      width: 100%;
     }
 
     input[type="text"] {
       flex: 1;
+      min-width: 0;
       background: #0f172a;
       border: 1px solid #334155;
       border-radius: 10px;
       padding: 14px 16px;
       color: #f8fafc;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 18px;
+      font-size: 16px;
       letter-spacing: 2px;
       outline: none;
       transition: border-color 0.2s ease;
@@ -329,13 +331,34 @@
 
     /* Buttons */
     .btn {
-      padding: 14px 20px;
+      padding: 14px 18px;
       border: none;
       border-radius: 10px;
       font-size: 15px;
       font-weight: 700;
       cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
       transition: all 0.2s ease;
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 8px;
+      }
+      .card {
+        padding: 16px;
+        gap: 16px;
+      }
+      input[type="text"] {
+        padding: 12px 12px;
+        font-size: 15px;
+        letter-spacing: 1px;
+      }
+      .btn {
+        padding: 12px 14px;
+        font-size: 14px;
+      }
     }
 
     .btn-primary {
