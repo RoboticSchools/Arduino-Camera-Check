@@ -162,26 +162,24 @@
       object-fit: cover !important;
     }
 
-    /* 16:9 Full Width Laptop Video Container */
+    /* Simple Widescreen Laptop Video Container */
     .laptop-video {
       width: 100%;
       aspect-ratio: 16 / 9;
       min-height: 280px;
-      cursor: pointer;
     }
 
-    /* Laptop Video Rotation & Full Screen Scaling Transforms */
     #remoteVideo {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       display: block;
-      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: transform 0.3s ease;
       transform-origin: center center;
     }
 
     #remoteVideo.rotate-90 {
-      transform: rotate(90deg) scale(1.35);
+      transform: rotate(90deg);
     }
 
     #remoteVideo.rotate-180 {
@@ -189,7 +187,7 @@
     }
 
     #remoteVideo.rotate-270 {
-      transform: rotate(270deg) scale(1.35);
+      transform: rotate(270deg);
     }
 
     video {
@@ -238,9 +236,10 @@
 
     .info-value {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 24px;
-      font-weight: 700;
+      font-size: 32px;
+      font-weight: 800;
       color: #38bdf8;
+      letter-spacing: 4px;
       word-break: break-all;
       user-select: all;
     }
@@ -317,7 +316,8 @@
       padding: 14px 16px;
       color: #f8fafc;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 16px;
+      font-size: 18px;
+      letter-spacing: 2px;
       outline: none;
       transition: border-color 0.2s ease;
     }
@@ -427,10 +427,10 @@
           </div>
         </div>
 
-        <!-- Connection Address Banner -->
+        <!-- Connection Code Banner -->
         <div class="info-box">
-          <div class="info-label">Mobile Connection Code / Address:</div>
-          <div id="mobileAddressDisplay" class="info-value">Generating Code...</div>
+          <div class="info-label">Mobile Connection Code:</div>
+          <div id="mobileAddressDisplay" class="info-value">...</div>
         </div>
 
         <!-- Mobile Status Badges -->
@@ -458,20 +458,20 @@
       <div class="card">
         <h1 class="view-title">CAMERA VIEWER</h1>
 
-        <!-- Address Entry & Connect Form -->
+        <!-- Code Entry & Connect Form -->
         <div class="connect-form">
-          <label for="inputMobileAddress" class="input-label">Enter Mobile Connection Code / Address:</label>
+          <label for="inputMobileAddress" class="input-label">Enter Mobile Connection Code:</label>
           <div class="input-group">
-            <input type="text" id="inputMobileAddress" placeholder="e.g. CAM-4892 or 192.168.0.7" spellcheck="false" autocomplete="off">
+            <input type="text" id="inputMobileAddress" placeholder="e.g. 4892" maxlength="10" spellcheck="false" autocomplete="off">
             <button id="btnConnect" class="btn btn-primary" onclick="connectToMobile()">CONNECT</button>
           </div>
         </div>
 
         <!-- Laptop Video Display Area -->
-        <div class="video-container laptop-video" id="laptopVideoContainer" onclick="rotateLaptopVideo(event)">
+        <div class="video-container laptop-video" id="laptopVideoContainer">
           <video id="remoteVideo" autoplay playsinline muted></video>
 
-          <!-- Top Right Rotate 90° Button -->
+          <!-- Optional Rotate Button -->
           <button id="btnLaptopRotate" class="fullscreen-btn" onclick="rotateLaptopVideo(event)" title="Rotate Video 90°">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
@@ -499,9 +499,8 @@
     let localStream = null;
     let peer = null;
     let currentCall = null;
-    let dataConn = null;
     let myPeerId = null;
-    let laptopRotationAngle = 90; // Default 90 degrees rotation to fill screen upright
+    let laptopRotationAngle = 0;
 
     // Elements
     const tabMobile = document.getElementById('tabMobile');
@@ -577,7 +576,7 @@
       }
     }
 
-    // Rotate Laptop Video Preview Manual Toggle
+    // Optional Rotate Laptop Video Preview
     function rotateLaptopVideo(e) {
       if (e) e.stopPropagation();
       laptopRotationAngle = (laptopRotationAngle + 90) % 360;
@@ -643,22 +642,23 @@
       }
     }
 
-    function generateShortCode() {
-      const code = Math.floor(1000 + Math.random() * 9000);
-      return `CAM-${code}`;
+    function generate4DigitCode() {
+      return Math.floor(1000 + Math.random() * 9000).toString();
     }
 
     function initMobilePeer() {
       cleanupPeer();
 
-      const customId = generateShortCode();
+      const userCode = generate4DigitCode(); // e.g. "4892"
+      mobileAddressDisplay.textContent = userCode;
+
+      const internalPeerId = 'camspec-' + userCode;
 
       if (typeof Peer !== 'undefined') {
-        peer = new Peer(customId, { debug: 1 });
+        peer = new Peer(internalPeerId, { debug: 1 });
 
         peer.on('open', (id) => {
           myPeerId = id;
-          mobileAddressDisplay.textContent = id;
           console.log('Mobile Peer ID ready:', id);
         });
 
@@ -686,17 +686,18 @@
         });
 
         peer.on('error', (err) => {
-          console.warn('PeerJS fallback to random ID:', err);
+          console.warn('PeerJS fallback:', err);
           if (err.type === 'unavailable-id') {
-            peer = new Peer({ debug: 1 });
+            const fallbackCode = generate4DigitCode();
+            mobileAddressDisplay.textContent = fallbackCode;
+            peer = new Peer('camspec-' + fallbackCode, { debug: 1 });
             peer.on('open', id => {
               myPeerId = id;
-              mobileAddressDisplay.textContent = id;
             });
           }
         });
       } else {
-        mobileAddressDisplay.textContent = window.location.hostname;
+        mobileAddressDisplay.textContent = '8888';
       }
     }
 
@@ -724,7 +725,7 @@
 
     function initLaptopPeer() {
       cleanupPeer();
-      laptopRotationAngle = 90; // Default 90 degree rotation
+      laptopRotationAngle = 0; // Clean 0 deg default
       if (typeof Peer !== 'undefined') {
         peer = new Peer({ debug: 1 });
         peer.on('open', id => console.log('Laptop Peer ready:', id));
@@ -734,11 +735,15 @@
     async function connectToMobile() {
       let code = inputMobileAddress.value.trim();
       if (!code) {
-        alert('Please enter the Mobile Connection Code (e.g. CAM-1234) shown on your mobile screen.');
+        alert('Please enter the 4-digit Mobile Connection Code shown on your mobile screen.');
         return;
       }
 
-      code = code.replace(/^https?:\/\//i, '').split('/')[0].split(':')[0].trim();
+      // Prepend internal prefix if user typed 4-digit code e.g. "4892" -> "camspec-4892"
+      let targetPeerId = code;
+      if (/^\d{4}$/.test(code)) {
+        targetPeerId = 'camspec-' + code;
+      }
 
       updateLaptopStatus('connecting', 'Connecting...');
       remoteOverlayText.textContent = 'Connecting to Mobile Camera Stream...';
@@ -754,8 +759,8 @@
       canvas.height = 16;
       const dummyStream = canvas.captureStream(1);
 
-      console.log('Calling mobile peer:', code);
-      const call = peer.call(code, dummyStream);
+      console.log('Calling mobile peer:', targetPeerId);
+      const call = peer.call(targetPeerId, dummyStream);
       currentCall = call;
 
       call.on('stream', async (remoteStream) => {
@@ -770,8 +775,7 @@
         remoteOverlay.classList.add('hidden');
         updateLaptopStatus('streaming', 'Streaming');
 
-        // Apply default 90-degree rotation so mobile stream in holder fills laptop screen upright
-        applyVideoTransform(90);
+        applyVideoTransform(0);
       });
 
       call.on('close', () => {
@@ -806,10 +810,6 @@
     }
 
     function cleanupPeer() {
-      if (dataConn) {
-        dataConn.close();
-        dataConn = null;
-      }
       if (currentCall) {
         currentCall.close();
         currentCall = null;

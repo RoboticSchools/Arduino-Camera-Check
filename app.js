@@ -2,9 +2,8 @@ let currentMode = 'mobile';
 let localStream = null;
 let peer = null;
 let currentCall = null;
-let dataConn = null;
 let myPeerId = null;
-let laptopRotationAngle = 90; // Default 90 degrees rotation
+let laptopRotationAngle = 0;
 
 // Elements
 const tabMobile = document.getElementById('tabMobile');
@@ -80,7 +79,7 @@ function toggleMobileFullscreen() {
   }
 }
 
-// Rotate Laptop Video Preview Manual Toggle
+// Optional Rotate Laptop Video Preview
 function rotateLaptopVideo(e) {
   if (e) e.stopPropagation();
   laptopRotationAngle = (laptopRotationAngle + 90) % 360;
@@ -146,22 +145,23 @@ async function startMobileCamera() {
   }
 }
 
-function generateShortCode() {
-  const code = Math.floor(1000 + Math.random() * 9000);
-  return `CAM-${code}`;
+function generate4DigitCode() {
+  return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
 function initMobilePeer() {
   cleanupPeer();
 
-  const customId = generateShortCode();
+  const userCode = generate4DigitCode(); // e.g. "4892"
+  mobileAddressDisplay.textContent = userCode;
+
+  const internalPeerId = 'camspec-' + userCode;
 
   if (typeof Peer !== 'undefined') {
-    peer = new Peer(customId, { debug: 1 });
+    peer = new Peer(internalPeerId, { debug: 1 });
 
     peer.on('open', (id) => {
       myPeerId = id;
-      mobileAddressDisplay.textContent = id;
       console.log('Mobile Peer ID ready:', id);
     });
 
@@ -189,17 +189,18 @@ function initMobilePeer() {
     });
 
     peer.on('error', (err) => {
-      console.warn('PeerJS fallback to random ID:', err);
+      console.warn('PeerJS fallback:', err);
       if (err.type === 'unavailable-id') {
-        peer = new Peer({ debug: 1 });
+        const fallbackCode = generate4DigitCode();
+        mobileAddressDisplay.textContent = fallbackCode;
+        peer = new Peer('camspec-' + fallbackCode, { debug: 1 });
         peer.on('open', id => {
           myPeerId = id;
-          mobileAddressDisplay.textContent = id;
         });
       }
     });
   } else {
-    mobileAddressDisplay.textContent = window.location.hostname;
+    mobileAddressDisplay.textContent = '8888';
   }
 }
 
@@ -227,7 +228,7 @@ function updateStreamingStatus(color, text) {
 
 function initLaptopPeer() {
   cleanupPeer();
-  laptopRotationAngle = 90;
+  laptopRotationAngle = 0; // Clean 0 deg default
   if (typeof Peer !== 'undefined') {
     peer = new Peer({ debug: 1 });
     peer.on('open', id => console.log('Laptop Peer ready:', id));
@@ -237,11 +238,14 @@ function initLaptopPeer() {
 async function connectToMobile() {
   let code = inputMobileAddress.value.trim();
   if (!code) {
-    alert('Please enter the Mobile Connection Code (e.g. CAM-1234) shown on your mobile screen.');
+    alert('Please enter the 4-digit Mobile Connection Code shown on your mobile screen.');
     return;
   }
 
-  code = code.replace(/^https?:\/\//i, '').split('/')[0].split(':')[0].trim();
+  let targetPeerId = code;
+  if (/^\d{4}$/.test(code)) {
+    targetPeerId = 'camspec-' + code;
+  }
 
   updateLaptopStatus('connecting', 'Connecting...');
   remoteOverlayText.textContent = 'Connecting to Mobile Camera Stream...';
@@ -257,8 +261,8 @@ async function connectToMobile() {
   canvas.height = 16;
   const dummyStream = canvas.captureStream(1);
 
-  console.log('Calling mobile peer:', code);
-  const call = peer.call(code, dummyStream);
+  console.log('Calling mobile peer:', targetPeerId);
+  const call = peer.call(targetPeerId, dummyStream);
   currentCall = call;
 
   call.on('stream', async (remoteStream) => {
@@ -273,7 +277,7 @@ async function connectToMobile() {
     remoteOverlay.classList.add('hidden');
     updateLaptopStatus('streaming', 'Streaming');
 
-    applyVideoTransform(90);
+    applyVideoTransform(0);
   });
 
   call.on('close', () => {
@@ -308,10 +312,6 @@ function updateLaptopStatus(stateClass, text) {
 }
 
 function cleanupPeer() {
-  if (dataConn) {
-    dataConn.close();
-    dataConn = null;
-  }
   if (currentCall) {
     currentCall.close();
     currentCall = null;
