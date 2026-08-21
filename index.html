@@ -448,7 +448,7 @@
 
         <!-- Laptop Video Display Area -->
         <div class="video-container laptop-video">
-          <video id="remoteVideo" autoplay playsinline></video>
+          <video id="remoteVideo" autoplay playsinline muted></video>
           <div id="remoteOverlay" class="video-overlay">
             <p id="remoteOverlayText">[ LIVE MOBILE CAMERA ]</p>
           </div>
@@ -474,13 +474,16 @@
     let serverIp = window.location.hostname || '127.0.0.1';
     let serverPort = window.location.port || '8443';
     let pollInterval = null;
+    let pendingIceCandidates = [];
 
     // STUN server configuration for local P2P WebRTC ICE candidate resolution
     const rtcConfig = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ],
+      iceCandidatePoolSize: 10
     };
 
     // Elements
@@ -511,7 +514,6 @@
 
     // Initialize on DOM load
     window.addEventListener('DOMContentLoaded', () => {
-      // Auto-detect mode based on screen width / user agent touch capability
       const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
       const initialMode = isMobile ? 'mobile' : 'laptop';
       
@@ -522,7 +524,6 @@
     function setMode(mode) {
       currentMode = mode;
 
-      // Clear existing polling / peer connections when switching modes
       stopPolling();
       closePeerConnection();
 
@@ -532,7 +533,6 @@
         mobileView.classList.add('active');
         laptopView.classList.remove('active');
 
-        // Immediately request camera permission in Mobile Mode
         startMobileCamera();
       } else {
         tabLaptop.classList.add('active');
@@ -540,7 +540,6 @@
         laptopView.classList.add('active');
         mobileView.classList.remove('active');
 
-        // Stop local camera if running in mobile mode previously
         stopLocalCamera();
         updateLaptopStatus('disconnected', 'Disconnected');
         fetchDiscoveredSessions();
@@ -558,7 +557,6 @@
       document.getElementById('btnRetryCamera').classList.add('hidden');
 
       try {
-        // Attempt rear camera first, fallback to default camera
         let stream;
         try {
           stream = await navigator.mediaDevices.getUserMedia({
@@ -566,7 +564,7 @@
             audio: false
           });
         } catch (e) {
-          console.warn('Rear camera exact match failed, trying facingMode environment fallback:', e);
+          console.warn('Rear camera exact match failed, using environment fallback:', e);
           stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: 'environment' },
             audio: false
@@ -575,12 +573,12 @@
 
         localStream = stream;
         mobilePreview.srcObject = stream;
+        await mobilePreview.play().catch(e => console.warn('Mobile preview play:', e));
         cameraOverlay.classList.add('hidden');
 
         updateCameraStatus('green', 'Connected');
         updateStreamingStatus('yellow', 'Ready');
 
-        // Register mobile session on server
         await registerMobileSession();
 
       } catch (err) {
@@ -613,7 +611,6 @@
           const fullAddr = `${serverIp}:${serverPort}`;
           mobileAddressDisplay.textContent = fullAddr;
 
-          // Start polling for laptop SDP offers
           startMobileSignalPolling();
         }
       } catch (err) {
@@ -632,7 +629,7 @@
 
           if (data.messages && data.messages.length > 0) {
             for (const msg of data.messages) {
-              handleMobileReceivedSignal(msg);
+              await handleMobileReceivedSignal(msg);
             }
           }
         } catch (e) {
@@ -649,27 +646,37 @@
         createMobilePeerConnection();
 
         await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+
+        // Process queued candidates
+        while (pendingIceCandidates.length > 0) {
+          const candidate = pendingIceCandidates.shift();
+          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.warn('Queued ICE cand error:', e));
+        }
+
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
 
-        // Send SDP Answer back to Laptop
         await sendSignal('laptop', { type: 'answer', sdp: answer });
 
-      } else if (msg.type === 'candidate' && peerConnection) {
-        try {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
-        } catch (e) {
-          console.error('Error adding ICE candidate on mobile:', e);
+      } else if (msg.type === 'candidate') {
+        if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+          try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          } catch (e) {
+            console.error('Error adding ICE candidate on mobile:', e);
+          }
+        } else {
+          pendingIceCandidates.push(msg.candidate);
         }
       }
     }
 
     function createMobilePeerConnection() {
       closePeerConnection();
+      pendingIceCandidates = [];
 
       peerConnection = new RTCPeerConnection(rtcConfig);
 
-      // Add local video tracks to WebRTC peer connection
       if (localStream) {
         localStream.getTracks().forEach(track => {
           peerConnection.addTrack(track, localStream);
@@ -713,7 +720,6 @@
         return;
       }
 
-      // Extract IP or session ID from user input (e.g., https://192.168.1.15:8443 -> 192.168.1.15)
       targetAddr = targetAddr.replace(/^https?:\/\//i, '').split('/')[0].split(':')[0];
       sessionId = targetAddr;
 
@@ -723,7 +729,6 @@
 
       createLaptopPeerConnection();
 
-      // Create WebRTC Offer
       try {
         const offer = await peerConnection.createOffer({
           offerToReceiveVideo: true,
@@ -731,10 +736,8 @@
         });
         await peerConnection.setLocalDescription(offer);
 
-        // Send Offer to Mobile
         await sendSignal('mobile', { type: 'offer', sdp: offer });
 
-        // Start polling for Mobile SDP Answer & ICE candidates
         startLaptopSignalPolling();
       } catch (err) {
         console.error('Error creating offer:', err);
@@ -744,14 +747,21 @@
 
     function createLaptopPeerConnection() {
       closePeerConnection();
+      pendingIceCandidates = [];
 
       peerConnection = new RTCPeerConnection(rtcConfig);
 
-      // Receive remote camera track from Mobile
-      peerConnection.ontrack = (event) => {
+      peerConnection.ontrack = async (event) => {
         console.log('Laptop received remote track:', event.streams[0]);
         if (event.streams && event.streams[0]) {
           remoteVideo.srcObject = event.streams[0];
+          remoteVideo.muted = true; // Essential for browser autoplay policies
+          try {
+            await remoteVideo.play();
+            console.log('Remote video playing successfully');
+          } catch (err) {
+            console.warn('Video play error:', err);
+          }
           remoteOverlay.classList.add('hidden');
           updateLaptopStatus('streaming', 'Streaming');
         }
@@ -769,6 +779,7 @@
           updateLaptopStatus('connecting', 'Connecting');
         } else if (peerConnection.connectionState === 'connected') {
           updateLaptopStatus('connected', 'Connected');
+          remoteOverlay.classList.add('hidden');
         } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
           updateLaptopStatus('disconnected', 'Disconnected');
           remoteOverlay.classList.remove('hidden');
@@ -787,7 +798,7 @@
 
           if (data.messages && data.messages.length > 0) {
             for (const msg of data.messages) {
-              handleLaptopReceivedSignal(msg);
+              await handleLaptopReceivedSignal(msg);
             }
           }
         } catch (e) {
@@ -800,11 +811,22 @@
       if (msg.type === 'answer' && peerConnection) {
         console.log('Laptop received WebRTC Answer from mobile');
         await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-      } else if (msg.type === 'candidate' && peerConnection) {
-        try {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
-        } catch (e) {
-          console.error('Error adding ICE candidate on laptop:', e);
+
+        // Process queued candidates
+        while (pendingIceCandidates.length > 0) {
+          const candidate = pendingIceCandidates.shift();
+          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.warn('Queued ICE cand error:', e));
+        }
+
+      } else if (msg.type === 'candidate') {
+        if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+          try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          } catch (e) {
+            console.error('Error adding ICE candidate on laptop:', e);
+          }
+        } else {
+          pendingIceCandidates.push(msg.candidate);
         }
       }
     }
@@ -833,7 +855,6 @@
           serverIp = data.ip;
           serverPort = data.port || '8443';
           
-          // Auto-prefill input in laptop mode if server IP detected
           if (inputMobileAddress && !inputMobileAddress.value) {
             inputMobileAddress.value = `${serverIp}:${serverPort}`;
           }
@@ -900,6 +921,7 @@
         peerConnection.close();
         peerConnection = null;
       }
+      pendingIceCandidates = [];
     }
   </script>
 </body>
